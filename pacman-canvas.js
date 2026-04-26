@@ -28,6 +28,7 @@ const GHOST_POINTS = 100;
 const HIGHSCORE_ENABLED = true;
 
 
+
 function geronimo() {
 	/* ----- Global Variables ---------------------------------------- */
 	var canvas;
@@ -37,7 +38,285 @@ function geronimo() {
 	var inky, blinky, clyde, pinky;
 
 	var mapConfig = "data/map.json";
+	// Stress Response System - Main addition to the original game that is comprised of many sub-functions. //
+const stressSystem = {
+    startTime: 0,
+    elapsed: 0,
+    stress: 0.05,
+    stage: 1,
+	pauseStartTime: 0,
+	totalPausedMs: 0,
+    active: false,
+	heartbeatActive: false,
+	tunnelVisionActive: false,
+	reverseControlsActive: false,
+	// Sub Functions that control different mechanisms of the visual and mechanistic parts of the game. //
+    start: function() {
+        this.startTime = Date.now();
+        this.stress = 0.05;
+        this.stage = 1;
+        this.active = true;
+		this.pauseStartTime = 0;     
+    	this.totalPausedMs = 0;
+		this.showNarrative(
+			'STAGE 1: BASELINE',
+			'A stressor activates the HPA axis, resulting in CRH release from the hypothalamus that leads to ACTH release in the pituitary gland that leads to cortisol release in the adrenal glands. Cortisol results in improved alertness and more energy from glucose mobilization. The process is controlled by negative feedback.',
+			3000
+		);
+    },
+	reset: function() {
+		this.startTime = 0;
+		this.elapsed = 0;
+		this.stress = 0.05;
+		this.stage = 1;
+		this.active = false;
+		this.heartbeatActive = false;
+		this.tunnelVisionActive = false;
+		this.reverseControlsActive = false;
+		this.pauseStartTime = 0;
+		this.totalPausedMs = 0;
+		
+		const hb = document.getElementById('heartbeat-overlay');
+		if (hb) hb.style.background = 'none';
+		const tv = document.getElementById('tunnel-vision-overlay');
+		if (tv){
+			tv.style.transition = 'background 2s ease';
+			tv.style.background = 'radial-gradient(ellipse at center, transparent 100%, rgba(0,0,0,0) 100%)';
+		}
 
+		const narrative = document.getElementById('narrative-overlay');
+		if (narrative) narrative.classList.remove('show');
+		
+		// Resetting Stress Bar
+		const fill = document.getElementById('stress-fill');
+		const label = document.getElementById('stress-pct');
+		if (fill) fill.style.width = '5%';
+		if (label) label.textContent = '5%';
+		
+		// Resetting Ghost Speeds
+		if (typeof game !== 'undefined' && game){
+			game.ghostSpeedNormal = 2;}
+		if (typeof inky !== 'undefined' && inky) inky.changeSpeed(2);
+		if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(2);
+		if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(2);
+		if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(2);
+		console.log('Stress system reset for new game');
+	},
+
+    update: function() {
+        if (!this.active) return;
+		// Dealing with Paused Game
+        if (game.pause){
+			if (this.pauseStartTime === 0){
+				this.pauseStartTime = Date.now();}
+			return;
+		}
+		if (this.pauseStartTime !== 0){
+			this.totalPausedMs += Date.now() - this.pauseStartTime;
+			this.pauseStartTime = 0;}
+		
+		this.elapsed = (Date.now() - this.startTime - this.totalPausedMs) / 1000;
+        this.stress = Math.min(1, 0.05 + this.elapsed / 150);
+		if (this.stress >= 1.0 && !game.gameOver) {
+			console.log('=== ALLOSTATIC OVERLOAD: Game Over ===');
+			game.endGame();
+			game.pauseAndShowMessage('ALLOSTATIC OVERLOAD', 'Your body has hit chronic stress collapse. Final score: ' + game.score.score);
+			return;
+		}
+
+        // Updating UI
+        const pct = Math.round(this.stress * 100);
+        const fill = document.getElementById('stress-fill');
+        const label = document.getElementById('stress-pct');
+        if (fill) fill.style.width = pct + '%';
+        if (label) label.textContent = pct + '%';
+
+       //Stage Transition Check Based on Stress Amount
+		let newStage = 1;
+		if (this.stress >= 0.85) newStage = 4;
+		else if (this.stress >= 0.65) newStage = 3;
+		else if (this.stress >= 0.35) newStage = 2;
+		if (newStage !== this.stage) {
+			if (newStage > this.stage) {
+				//applying new stage
+				for (let s = this.stage + 1; s <= newStage; s++){
+					this.stage = s;
+					this.applyStage(s);}
+			} else {
+				//removing previous stage
+				for (let s = this.stage; s > newStage; s--) {
+					this.unapplyStage(s);}
+				this.stage = newStage;
+			}
+		}
+		//Heartbeat effect
+		if (this.heartbeatActive){
+			const bpm = 1.3;
+			const beat = Math.sin(this.elapsed * Math.PI * 2 * bpm) * 0.5 + 0.5;
+			const overlay = document.getElementById('heartbeat-overlay');
+			if (overlay) {
+				overlay.style.background = `radial-gradient(ellipse at center, transparent 30%, rgba(255, 0, 0, ${0.6 * beat}) 100%)`;}
+		}
+		//Pulsing Tunnel Vision
+		if (this.stage >= 4 && this.tunnelVisionActive){
+			const pulseSpeed = 1.5;
+			const pulse = Math.sin(this.elapsed * Math.PI * 2 * pulseSpeed) * 0.5 + 0.5;
+			const clearSize = 12 + (pulse * 10);
+			const darkOpacity = 0.85 + (pulse * 0.13);
+			const overlay = document.getElementById('tunnel-vision-overlay');
+			if (overlay){
+				overlay.style.transition = 'none';
+				overlay.style.background = `radial-gradient(ellipse at center, transparent ${clearSize}%, rgba(0,0,0,${darkOpacity}) 70%)`;}
+		}
+    },
+	//Cortisol Spike from Hitting Ghost
+	spike: function(amount) {
+		if (!this.active) return;
+		const spikeSeconds = amount * 150;
+		this.startTime -= spikeSeconds * 1000;
+		console.log('CORTISOL SPIKE: +' + Math.round(amount * 100) + '%');
+	},
+	//Visual Overlay at each stage
+	showNarrative: function(title, text, duration) {
+		duration = duration || 5000;
+		const overlay = document.getElementById('narrative-overlay');
+		const titleEl = document.getElementById('narrative-title');
+		const textEl = document.getElementById('narrative-text');
+		if (!overlay || !titleEl || !textEl) return;
+		titleEl.textContent = title;
+		textEl.textContent = text;
+		overlay.classList.add('show');
+		setTimeout(function() {
+			overlay.classList.remove('show');
+		}, duration);
+	},
+	//Creating Sleep Pellet
+	spawnSleepPellet: function() {
+		if (!game.map || !game.map.posY) return;
+		const pillLocations = [];
+		for (let y = 0; y < game.map.posY.length; y++) {
+			const row = game.map.posY[y];
+			if (!row || !row.posX) continue;
+			for (let x = 0; x < row.posX.length; x++){
+				if (row.posX[x].type === 'pill'){
+					pillLocations.push({ x: x, y: y });}}
+		}
+		if (pillLocations.length === 0){
+			console.log('No pills available for sleep pellet spawn');
+			return;}
+		const loc = pillLocations[Math.floor(Math.random() * pillLocations.length)];
+		game.map.posY[loc.y].posX[loc.x].type = 'sleeppill';
+		game.pillCount--;
+		console.log('SLEEP PELLET spawned at (' + loc.x + ', ' + loc.y + ')');
+	},
+	//Sleep Pellet Interaction Mechanism, reduces stress and slows down ghost speeds
+	consumeSleepPellet: function() {
+		if (!this.active) return;
+		const reduction = 0.30;
+		const reductionSeconds = reduction * 150;
+		this.startTime += reductionSeconds * 1000;
+		console.log('SLEEP PELLET CONSUMED — cortisol -30%');
+		const slowSpeed = 2;
+		if (typeof inky !== 'undefined' && inky) inky.changeSpeed(slowSpeed);
+		if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(slowSpeed);
+		if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(slowSpeed);
+		if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(slowSpeed);
+		const originalSpeed = game.ghostSpeedNormal;
+		setTimeout(function() {
+			if (typeof inky !== 'undefined' && inky) inky.changeSpeed(originalSpeed);
+			if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(originalSpeed);
+			if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(originalSpeed);
+			if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(originalSpeed);
+			console.log('Sleep effect ended — ghosts back to current stage speed');}, 5000);
+		const overlay = document.getElementById('heartbeat-overlay');
+		if (overlay) {
+			const oldBg = overlay.style.background;
+			overlay.style.transition = 'background 0.2s';
+			overlay.style.background = 'radial-gradient(ellipse at center, transparent 30%, rgba(0, 220, 255, 0.4) 100%)';
+			setTimeout(function() {
+				overlay.style.background = oldBg;
+				overlay.style.transition = 'background 0.15s';}, 600);}
+	},
+	//Different Stages and their visual and game-oriented mechanisms
+	applyStage: function(s) {
+		console.log('=== STAGE TRANSITION: entering Stage ' + s + ' at ' + Math.round(this.elapsed) + 's ===');
+
+		if (s === 2) {
+			this.heartbeatActive = true;
+			const newSpeed = 3;
+			game.ghostSpeedNormal = newSpeed;
+			if (typeof inky !== 'undefined' && inky) inky.changeSpeed(newSpeed);
+			if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(newSpeed);
+			if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(newSpeed);
+			if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(newSpeed);
+			this.spawnSleepPellet();
+			this.showNarrative(
+				'STAGE 2: ACUTE STRESS',
+				'The stress response is prolonged and the body shifts its "set points" to adapt (allostasis). Cortisol remains elevated and functions such as digestion and immune function are negatively impacted, and alertness is heightened.',
+				3000);
+		}
+	
+		if (s === 3) {
+			this.tunnelVisionActive = true;
+			this.heartbeatActive = false;
+			this.spawnSleepPellet();
+
+			const hb = document.getElementById('heartbeat-overlay');
+			if (hb) hb.style.background = 'none';
+			const overlay = document.getElementById('tunnel-vision-overlay');
+			if (overlay) {
+				overlay.style.background = 'radial-gradient(ellipse at center, transparent 22%, rgba(0,0,0,0.98) 70%)';}
+			this.showNarrative(
+				'STAGE 3: SUSTAINED STRESS',
+				'Constant HPA activation occurs due to weakened negative feedback occurring on the hypothalamus and pituitary gland by cortisol. Decreased immune function and memory and increased fatigue is experienced. The body is functioning inefficient',
+				3000);
+		}
+		if (s == 4){
+			this.spawnSleepPellet();
+			this.reverseControlsActive = true;
+    		console.log('STAGE 4: Reversed controls activated (15% chance per keypress)');
+			this.showNarrative(
+				'STAGE 4: ALLOSTATIC OVERLOAD',
+				'Energy demand exceeds the amount of energy being consumed or produced. The HPA axis remains dysregulated and cortisol is high, resulting in psychological disorders such as anxiety, depression, PTSD, etc and other physiological changes',
+				3000);
+		}
+	},
+	unapplyStage: function(s) {
+		console.log('=== STAGE RECOVERY: leaving Stage ' + s + ' at ' + Math.round(this.elapsed) + 's ===');
+		
+		if (s === 4) {
+			this.reverseControlsActive = false;
+    		console.log('Stage 4 recovery: controls back to normal');
+			const overlay = document.getElementById('tunnel-vision-overlay');
+    		if (overlay) overlay.style.transition = 'background 2s ease';
+		}
+		
+		if (s === 3) {
+			this.tunnelVisionActive = false;
+			this.heartbeatActive = true;
+			const overlay = document.getElementById('tunnel-vision-overlay');
+			if (overlay) {
+				overlay.style.background = 'radial-gradient(ellipse at center, transparent 100%, transparent 100%)';
+			}
+		}
+		
+		if (s === 2) {
+			this.heartbeatActive = false;
+			const hb = document.getElementById('heartbeat-overlay');
+			if (hb) {
+				hb.style.background = 'radial-gradient(ellipse at center, transparent 30%, rgba(255, 0, 0, 0) 100%)';
+			}
+			const baseSpeed = 2;
+			game.ghostSpeedNormal = baseSpeed;
+			if (typeof inky !== 'undefined' && inky) inky.changeSpeed(baseSpeed);
+			if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(baseSpeed);
+			if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(baseSpeed);
+			if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(baseSpeed);
+		}
+	}
+	
+	
+};
 
 	/* AJAX stuff */
 	var getHighscore = () => {
@@ -156,7 +435,8 @@ function geronimo() {
 		}
 	}
 
-	// Manages the whole game ("God Object")
+	// Manages the whole game ("God Object") - I did not write this part this is from the original open-source game. 
+	// So the following comments aren't mine either.
 	function Game() {
 		this.timer = new Timer(); // TODO: implememnt properly, and submit with highscore
 		this.refreshRate = 33; // speed of the game, will increase in higher levels
@@ -289,6 +569,7 @@ function geronimo() {
 			var r = confirm("Are you sure you want to restart?");
 			if (r) {
 				console.log("new Game");
+				stressSystem.reset();
 				this.init(0);
 				this.forceResume();
 			}
@@ -409,6 +690,7 @@ function geronimo() {
 			this.pause = false;
 			this.started = true;
 			this.closeMessage();
+			stressSystem.start();
 			animationLoop();
 		}
 
@@ -421,6 +703,10 @@ function geronimo() {
 			this.closeMessage();
 			this.pause = false;
 			this.timer.start();
+			// If stress system was reset, kick it back on
+			if (!stressSystem.active) {
+				stressSystem.start();
+			}
 		}
 
 		this.pauseResume = function () {
@@ -1092,33 +1378,36 @@ function geronimo() {
 				var fieldAhead = game.getMapContent(gridAheadX, gridAheadY);
 
 
-				/*	Check Pill Collision			*/
-				if ((field === "pill") || (field === "powerpill")) {
-					//console.log("Pill found at ("+gridX+"/"+gridY+"). Pacman at ("+this.posX+"/"+this.posY+")");
-					if (
-						((this.dirX == 1) && (between(this.posX, game.toPixelPos(gridX) + this.radius - this.speed, game.toPixelPos(gridX + 1)))) ||
-						((this.dirX == -1) && (between(this.posX, game.toPixelPos(gridX), game.toPixelPos(gridX) + this.speed))) ||
-						((this.dirY == 1) && (between(this.posY, game.toPixelPos(gridY) + this.radius - this.speed, game.toPixelPos(gridY + 1)))) ||
-						((this.dirY == -1) && (between(this.posY, game.toPixelPos(gridY), game.toPixelPos(gridY) + this.speed))) ||
-						(fieldAhead === "wall")
-					) {
-						var s;
-						if (field === "powerpill") {
-							Sound.play("powerpill");
-							s = POWERPILL_POINTS;
-							this.enableBeastMode();
-							game.startGhostFrightened();
-						} else {
-							Sound.play("waka");
-							s = PILL_POINTS;
-							game.pillCount--;
-						}
-						game.map.posY[gridY].posX[gridX].type = "null";
-						game.score.add(s);
-					}
-				}
+            /*	Modified this function to add in sleeppill			*/
+            if ((field === "pill") || (field === "powerpill") || (field === "sleeppill")) {
+                if (
+                    ((this.dirX == 1) && (between(this.posX, game.toPixelPos(gridX) + this.radius - this.speed, game.toPixelPos(gridX + 1)))) ||
+                    ((this.dirX == -1) && (between(this.posX, game.toPixelPos(gridX), game.toPixelPos(gridX) + this.speed))) ||
+                    ((this.dirY == 1) && (between(this.posY, game.toPixelPos(gridY) + this.radius - this.speed, game.toPixelPos(gridY + 1)))) ||
+                    ((this.dirY == -1) && (between(this.posY, game.toPixelPos(gridY), game.toPixelPos(gridY) + this.speed))) ||
+                    (fieldAhead === "wall")
+                ) {
+                    var s;
+                    if (field === "powerpill") {
+                        Sound.play("powerpill");
+                        s = POWERPILL_POINTS;
+                        this.enableBeastMode();
+                        game.startGhostFrightened();
+                    } else if (field === "sleeppill") {
+                        Sound.play("powerpill");
+                        s = 0;
+                        stressSystem.consumeSleepPellet();
+                    } else {
+                        Sound.play("waka");
+                        s = PILL_POINTS;
+                        game.pillCount--;
+                    }
+                    game.map.posY[gridY].posX[gridX].type = "null";
+                    game.score.add(s);
+                }
+            }
 
-				/*	Check Wall Collision			*/
+            /*	Check Wall Collision */
 				if ((fieldAhead === "wall") || (fieldAhead === "door")) {
 					this.stuckX = this.dirX;
 					this.stuckY = this.dirY;
@@ -1267,6 +1556,7 @@ function geronimo() {
 			this.dieAnimation();
 		}
 		this.dieFinal = function () {
+			stressSystem.spike(0.20);
 			this.reset();
 			pinky.reset();
 			inky.reset();
@@ -1483,6 +1773,7 @@ function geronimo() {
 		game.score.refresh(".score");
 
 		// Pills
+		// Draw white pills and power pills
 		context.beginPath();
 		context.fillStyle = "White";
 		context.strokeStyle = "White";
@@ -1504,9 +1795,31 @@ function geronimo() {
 		} else {
 			console.warn('Map not loaded (yet).')
 		}
-
 		context.fill();
 
+		// Draw cyan sleep pellets — pulsing
+		if (game.map && game.map.posY) {
+			const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 200);
+			context.beginPath();
+			context.fillStyle = `rgba(0, 220, 255, ${pulse})`;
+			context.strokeStyle = `rgba(0, 220, 255, ${pulse})`;
+			context.shadowColor = '#00dcff';
+			context.shadowBlur = 12;
+			
+			$.each(game.map.posY, (i, row) => {
+				const dotY = row.row;
+				$.each(row.posX, (j, column) => {
+					if (column.type == "sleeppill") {
+						const cx = game.toPixelPos(column.col - 1) + pacman.radius;
+						const cy = game.toPixelPos(dotY - 1) + pacman.radius;
+						context.moveTo(cx + 7, cy);
+						context.arc(cx, cy, 7, 0, 2 * Math.PI);
+					}
+				});
+			});
+			context.fill();
+			context.shadowBlur = 0;  // reset shadow for everything else
+		}
 		// Walls
 		context.drawImage(canvas_walls, 0, 0);
 
@@ -1590,33 +1903,43 @@ function geronimo() {
 
 		//requestAnimationFrame(animationLoop);
 		setTimeout(animationLoop, game.refreshRate);
+		stressSystem.update();
 
 	}
 
-
-
 	function doKeyDown(evt) {
 
+		//Keyboard Control Reverser during Stage 4
+		function applyDir(dir) {
+			if (stressSystem.reverseControlsActive && Math.random() < 0.15) {
+				if (dir === up) dir = down;
+				else if (dir === down) dir = up;
+				else if (dir === left) dir = right;
+				else if (dir === right) dir = left;
+			}
+			pacman.directionWatcher.set(dir);
+		}
+	
 		switch (evt.keyCode) {
 			case 38: // UP Arrow Key pressed
 				evt.preventDefault();
 			case 87: // W pressed
-				pacman.directionWatcher.set(up);
+				applyDir(up);
 				break;
 			case 40: // DOWN Arrow Key pressed
 				evt.preventDefault();
-			case 83: // S pressed 
-				pacman.directionWatcher.set(down);
+			case 83: // S pressed
+				applyDir(down);
 				break;
 			case 37: // LEFT Arrow Key pressed
 				evt.preventDefault();
 			case 65: // A pressed
-				pacman.directionWatcher.set(left);
+				applyDir(left);
 				break;
 			case 39: // RIGHT Arrow Key pressed
 				evt.preventDefault();
 			case 68: // D pressed
-				pacman.directionWatcher.set(right);
+				applyDir(right);
 				break;
 			case 78: // N pressed
 				if (!$('#playerName').is(':focus')) {
@@ -1627,18 +1950,16 @@ function geronimo() {
 			case 77: // M pressed
 				game.toggleSound();
 				break;
-			case 8: // Backspace pressed -> show Game Content
-			case 27: // ESC pressed -> show Game Content
+			case 8: // Backspace -> show Game Content
+			case 27: // ESC -> show Game Content
 				if (!$('#playerName').is(':focus')) {
 					evt.preventDefault();
 					game.showContent('game-content');
 				}
 				break;
-			case 32: // SPACE pressed -> pause Game
+			case 32: // SPACE -> pause Game
 				evt.preventDefault();
-				if (!(game.gameOver == true) &&
-					$('#game-content').is(':visible')
-				) game.pauseResume();
+				if (!(game.gameOver == true) && $('#game-content').is(':visible')) game.pauseResume();
 				break;
 		}
 	}
