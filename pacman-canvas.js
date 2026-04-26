@@ -63,6 +63,7 @@ const stressSystem = {
 			'A stressor activates the HPA axis, resulting in CRH release from the hypothalamus that leads to ACTH release in the pituitary gland that leads to cortisol release in the adrenal glands. Cortisol results in improved alertness and more energy from glucose mobilization. The process is controlled by negative feedback.',
 			3000
 		);
+		this.swapGif(1);
     },
 	reset: function() {
 		this.startTime = 0;
@@ -101,6 +102,7 @@ const stressSystem = {
 		if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(2);
 		if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(2);
 		console.log('Stress system reset for new game');
+		this.swapGif(1);
 	},
 
     update: function() {
@@ -190,6 +192,26 @@ const stressSystem = {
 			overlay.classList.remove('show');
 		}, duration);
 	},
+	swapGif: function(stageNum) {
+		const labels = {
+			1: 'STAGE 1: BASELINE',
+			2: 'STAGE 2: ACUTE STRESS',
+			3: 'STAGE 3: SUSTAINED STRESS',
+			4: 'STAGE 4: ALLOSTATIC OVERLOAD'
+		};
+		const descriptions = {
+			1: 'A stressor activates the HPA axis, resulting in CRH release from the hypothalamus that leads to ACTH release in the pituitary gland that leads to cortisol release in the adrenal glands. Cortisol results in improved alertness and more energy from glucose mobilization. The process is controlled by negative feedback.',
+			2: 'The stress response is prolonged and the body shifts its "set points" to adapt (allostasis). Cortisol remains elevated and functions such as digestion and immune function are negatively impacted, and alertness is heightened.',
+			3: 'Constant HPA activation occurs due to weakened negative feedback occurring on the hypothalamus and pituitary gland by cortisol. Decreased immune function and memory and increased fatigue is experienced. The body is functioning inefficiently.',
+			4: 'Energy demand exceeds the amount of energy being consumed or produced. The HPA axis remains dysregulated and cortisol is high, resulting in psychological disorders such as anxiety, depression, PTSD, etc., and other physiological changes.'
+		};
+		const gif = document.getElementById('stage-gif');
+		const label = document.getElementById('stage-gif-label');
+		const desc = document.getElementById('stage-description');
+		if (gif) gif.src = 'img/Stage' + stageNum + '.gif';
+		if (label) label.textContent = labels[stageNum] || '';
+		if (desc) desc.textContent = descriptions[stageNum] || '';
+	},
 	//Creating Sleep Pellet
 	spawnSleepPellet: function() {
 		if (!game.map || !game.map.posY) return;
@@ -254,6 +276,7 @@ const stressSystem = {
 				'STAGE 2: ACUTE STRESS',
 				'The stress response is prolonged and the body shifts its "set points" to adapt (allostasis). Cortisol remains elevated and functions such as digestion and immune function are negatively impacted, and alertness is heightened.',
 				3000);
+			this.swapGif(2);
 		}
 	
 		if (s === 3) {
@@ -270,6 +293,7 @@ const stressSystem = {
 				'STAGE 3: SUSTAINED STRESS',
 				'Constant HPA activation occurs due to weakened negative feedback occurring on the hypothalamus and pituitary gland by cortisol. Decreased immune function and memory and increased fatigue is experienced. The body is functioning inefficient',
 				3000);
+				this.swapGif(3);
 		}
 		if (s == 4){
 			this.spawnSleepPellet();
@@ -279,6 +303,7 @@ const stressSystem = {
 				'STAGE 4: ALLOSTATIC OVERLOAD',
 				'Energy demand exceeds the amount of energy being consumed or produced. The HPA axis remains dysregulated and cortisol is high, resulting in psychological disorders such as anxiety, depression, PTSD, etc and other physiological changes',
 				3000);
+				this.swapGif(4);
 		}
 	},
 	unapplyStage: function(s) {
@@ -289,6 +314,7 @@ const stressSystem = {
     		console.log('Stage 4 recovery: controls back to normal');
 			const overlay = document.getElementById('tunnel-vision-overlay');
     		if (overlay) overlay.style.transition = 'background 2s ease';
+			this.swapGif(3);
 		}
 		
 		if (s === 3) {
@@ -296,8 +322,8 @@ const stressSystem = {
 			this.heartbeatActive = true;
 			const overlay = document.getElementById('tunnel-vision-overlay');
 			if (overlay) {
-				overlay.style.background = 'radial-gradient(ellipse at center, transparent 100%, transparent 100%)';
-			}
+				overlay.style.background = 'radial-gradient(ellipse at center, transparent 100%, transparent 100%)';}
+			this.swapGif(2);
 		}
 		
 		if (s === 2) {
@@ -312,6 +338,7 @@ const stressSystem = {
 			if (typeof pinky !== 'undefined' && pinky) pinky.changeSpeed(baseSpeed);
 			if (typeof blinky !== 'undefined' && blinky) blinky.changeSpeed(baseSpeed);
 			if (typeof clyde !== 'undefined' && clyde) clyde.changeSpeed(baseSpeed);
+			this.swapGif(1);
 		}
 	}
 	
